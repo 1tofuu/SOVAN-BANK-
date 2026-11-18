@@ -1,26 +1,48 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Delete, Lock } from 'lucide-react';
+import { BRAND_ASSETS, PIN_LENGTH } from '../../constants/app';
 import { t } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SovanLogo } from '../common/SovanLogo';
+
+const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'back'] as const;
+const PIN_DOT_INDICES = Array.from({ length: PIN_LENGTH }, (_, idx) => idx);
+const ERROR_CLEAR_DELAY_MS = 350;
 
 export const PinLockScreen: React.FC = () => {
   const lang = useSettingsStore((s) => s.language);
   const unlockApp = useSettingsStore((s) => s.unlockApp);
   const [digits, setDigits] = useState('');
   const [error, setError] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
 
-  const handleDigit = (d: string) => {
-    if (digits.length >= 4) return;
-    const next = digits + d;
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleDigit = (digit: string) => {
+    if (digits.length >= PIN_LENGTH) return;
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+
+    const next = digits + digit;
     setDigits(next);
     setError(false);
 
-    if (next.length === 4) {
-      const ok = unlockApp(next);
-      if (!ok) {
+    if (next.length === PIN_LENGTH) {
+      const unlocked = unlockApp(next);
+      if (!unlocked) {
         setError(true);
-        setTimeout(() => setDigits(''), 350);
+        resetTimerRef.current = window.setTimeout(() => {
+          setDigits('');
+          resetTimerRef.current = null;
+        }, ERROR_CLEAR_DELAY_MS);
       }
     }
   };
@@ -30,13 +52,11 @@ export const PinLockScreen: React.FC = () => {
     setError(false);
   };
 
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'back'];
-
   return (
     <div className="fixed inset-0 z-50 bg-[#E9F4EA] dark:bg-[#0B120E] flex flex-col items-center justify-center px-6">
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <img
-          src="/assets/aistudio/bg3_c6f8d03b.png"
+          src={BRAND_ASSETS.background}
           alt=""
           className="w-full h-full object-cover object-center"
         />
@@ -60,7 +80,7 @@ export const PinLockScreen: React.FC = () => {
 
           {/* 4-dot PIN indicator */}
           <div className="flex items-center justify-center gap-4 pt-1">
-            {[0, 1, 2, 3].map((idx) => {
+            {PIN_DOT_INDICES.map((idx) => {
               const filled = idx < digits.length;
               return (
                 <div
@@ -86,9 +106,9 @@ export const PinLockScreen: React.FC = () => {
 
         {/* Circular Frosted-Blur Numeric Keypad */}
         <div className="grid grid-cols-3 gap-4 place-items-center w-full">
-          {keys.map((k, idx) => {
-            if (k === '') return <div key={`empty-${idx}`} className="w-16 h-16" />;
-            if (k === 'back') {
+          {KEYPAD_KEYS.map((key, idx) => {
+            if (key === '') return <div key={`empty-${idx}`} className="w-16 h-16" />;
+            if (key === 'back') {
               return (
                 <button
                   key="back"
@@ -103,12 +123,12 @@ export const PinLockScreen: React.FC = () => {
             }
             return (
               <button
-                key={k}
+                key={key}
                 type="button"
-                onClick={() => handleDigit(k)}
+                onClick={() => handleDigit(key)}
                 className="w-16 h-16 rounded-full bg-white/28 dark:bg-[#0B120E]/45 backdrop-blur-xl backdrop-saturate-150 border border-white/45 dark:border-white/15 text-xl font-semibold font-mono-num text-[#0B2419] dark:text-[#F1F5F2] hover:bg-white/45 dark:hover:bg-white/15 active:scale-95 transition-all shadow-sm flex items-center justify-center"
               >
-                {k}
+                {key}
               </button>
             );
           })}

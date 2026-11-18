@@ -1,24 +1,15 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { STORAGE_KEYS } from '../constants/app';
 import { createInitialMockTransactions } from '../data/mockData';
+import { safeStorage } from '../services/storage/safeStorage';
 import type {
-  Currency,
   DateFilterPreset,
+  NewTransactionInput,
   Transaction,
-  TransactionCategory,
   TransactionType,
-} from '../types/finance';
-
-export interface NewTransactionInput {
-  type: TransactionType;
-  amount: number;
-  currency: Currency;
-  category: TransactionCategory;
-  customCategory?: string;
-  recipient?: string;
-  description: string;
-  date: string;
-}
+} from '../types';
+import { roundCurrencyAmount } from '../utils/currency';
 
 interface TransactionState {
   transactions: Transaction[];
@@ -38,20 +29,39 @@ interface TransactionState {
   resetTransactions: () => void;
 }
 
+const INITIAL_FILTERS = {
+  searchQuery: '',
+  typeFilter: 'all' as const,
+  dateFilter: 'all' as const,
+  customDate: '',
+};
+
+function createTransactionId(): string {
+  return `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function normalizeTransactionInput(input: NewTransactionInput): NewTransactionInput {
+  return {
+    ...input,
+    amount: Math.max(0, roundCurrencyAmount(input.amount, input.currency)),
+    customCategory: input.customCategory?.trim() || undefined,
+    recipient: input.type === 'transfer' ? input.recipient?.trim() || undefined : undefined,
+    description: input.description.trim(),
+  };
+}
+
 export const useTransactionStore = create<TransactionState>()(
   persist(
     (set) => ({
       transactions: createInitialMockTransactions(new Date()),
-      searchQuery: '',
-      typeFilter: 'all',
-      dateFilter: 'all',
-      customDate: '',
+      ...INITIAL_FILTERS,
 
       addTransaction: (input) => {
         const now = new Date().toISOString();
+        const normalized = normalizeTransactionInput(input);
         const created: Transaction = {
-          id: `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-          ...input,
+          id: createTransactionId(),
+          ...normalized,
           createdAt: now,
           updatedAt: now,
         };
@@ -61,18 +71,15 @@ export const useTransactionStore = create<TransactionState>()(
         return created;
       },
 
-      updateTransaction: (id, updates) =>
+      updateTransaction: (id, updates) => {
+        const normalized = normalizeTransactionInput(updates);
+        const updatedAt = new Date().toISOString();
         set((state) => ({
           transactions: state.transactions.map((tx) =>
-            tx.id === id
-              ? {
-                  ...tx,
-                  ...updates,
-                  updatedAt: new Date().toISOString(),
-                }
-              : tx
+            tx.id === id ? { ...tx, ...normalized, updatedAt } : tx
           ),
-        })),
+        }));
+      },
 
       deleteTransaction: (id) =>
         set((state) => ({
@@ -83,25 +90,18 @@ export const useTransactionStore = create<TransactionState>()(
       setTypeFilter: (typeFilter) => set({ typeFilter }),
       setDateFilter: (dateFilter) => set({ dateFilter }),
       setCustomDate: (customDate) => set({ customDate }),
-      resetFilters: () =>
-        set({
-          searchQuery: '',
-          typeFilter: 'all',
-          dateFilter: 'all',
-          customDate: '',
-        }),
+      resetFilters: () => set(INITIAL_FILTERS),
 
       resetTransactions: () =>
         set({
           transactions: createInitialMockTransactions(new Date()),
-          searchQuery: '',
-          typeFilter: 'all',
-          dateFilter: 'all',
-          customDate: '',
+          ...INITIAL_FILTERS,
         }),
     }),
     {
-      name: 'sovan-transactions-v1',
+      name: STORAGE_KEYS.transactions,
+      storage: createJSONStorage(() => safeStorage),
+      // Persist only transaction records; keep History screen search/filter state transient.
       partialize: (state) => ({
         transactions: state.transactions,
       }),

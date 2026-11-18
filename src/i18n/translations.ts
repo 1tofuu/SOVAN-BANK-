@@ -1,7 +1,6 @@
-import type { Language } from '../types/finance';
+import type { Language } from '../types';
 
-export const TRANSLATIONS: Record<Language, Record<string, string>> = {
-  en: {
+const EN_TRANSLATIONS = {
     app_name: 'SOVAN',
     app_khmer: 'សុវណ្ណ',
     app_tagline: 'Personal Finance Tracker',
@@ -189,8 +188,11 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     about_sovan: 'About SOVAN',
     about_sovan_desc:
       'SOVAN (សុវណ្ណ, meaning Gold) blends calm minimalist fintech design with Cambodian cultural warmth. Built with modular TypeScript, Zustand state management, and exact dual-currency USD/KHR accounting.',
-  },
-  km: {
+} as const;
+
+export type TranslationKey = keyof typeof EN_TRANSLATIONS;
+
+const KM_TRANSLATIONS: Record<TranslationKey, string> = {
     app_name: 'SOVAN',
     app_khmer: 'សុវណ្ណ',
     app_tagline: 'កម្មវិធីគ្រប់គ្រងហិរញ្ញវត្ថុផ្ទាល់ខ្លួន',
@@ -378,7 +380,11 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     about_sovan: 'អំពី SOVAN (សុវណ្ណ)',
     about_sovan_desc:
       'SOVAN (សុវណ្ណ) រួមបញ្ចូលគ្នារវាងការរចនាហិរញ្ញវត្ថុបែបទំនើប និងភាពកក់ក្តៅនៃវប្បធម៌ខ្មែរ។ គាំទ្ររូបិយប័ណ្ណ USD និង KHR យ៉ាងជាក់លាក់។',
-  },
+};
+
+export const TRANSLATIONS: Record<Language, Record<TranslationKey, string>> = {
+  en: EN_TRANSLATIONS,
+  km: KM_TRANSLATIONS,
 };
 
 export const MONTH_NAMES_EN = [
@@ -394,7 +400,7 @@ export const MONTH_NAMES_EN = [
   'October',
   'November',
   'December',
-];
+] as const;
 
 export const MONTH_NAMES_KM = [
   'មករា',
@@ -409,13 +415,14 @@ export const MONTH_NAMES_KM = [
   'តុលា',
   'វិច្ឆិកា',
   'ធ្នូ',
-];
+] as const;
 
-export function t(lang: Language, key: string): string {
-  return TRANSLATIONS[lang][key] ?? TRANSLATIONS.en[key] ?? key;
+export function t(lang: Language, key: TranslationKey): string {
+  return TRANSLATIONS[lang][key] ?? TRANSLATIONS.en[key];
 }
 
 export function formatMonthYear(month: number, year: number, lang: Language): string {
   const names = lang === 'km' ? MONTH_NAMES_KM : MONTH_NAMES_EN;
-  return `${names[month - 1] ?? ''} ${year}`;
+  const safeIndex = Math.min(11, Math.max(0, month - 1));
+  return `${names[safeIndex]} ${year}`;
 }

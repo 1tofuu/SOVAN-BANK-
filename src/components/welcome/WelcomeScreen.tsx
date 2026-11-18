@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
+import { BRAND_ASSETS } from '../../constants/app';
 import { t } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -20,7 +21,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
       {/* Ambient blurred backdrop for wider screens */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <img
-          src="/assets/aistudio/welcome_92ba8332.png"
+          src={BRAND_ASSETS.welcome}
           alt=""
           className="w-full h-full object-cover object-center scale-110 blur-2xl opacity-65"
         />
@@ -30,7 +31,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
       <div className="relative w-full h-full max-w-[500px] sm:max-h-[920px] sm:h-[94dvh] sm:rounded-[32px] overflow-hidden sm:shadow-2xl sm:shadow-[#0E5A3E]/20 sm:border sm:border-white/50 flex flex-col justify-between">
         {/* User-provided welcome artwork */}
         <img
-          src="/assets/aistudio/welcome_92ba8332.png"
+          src={BRAND_ASSETS.welcome}
           alt="SOVAN BANK"
           className="absolute inset-0 w-full h-full object-cover object-bottom pointer-events-none"
         />
@@ -52,7 +53,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
           </p>
         </div>
 
-        {/* Bottom Welcome Enter Control (No login button) */}
+        {/* Bottom Welcome Enter Control */}
         <div className="relative z-10 px-6 pb-8 sm:pb-9 pb-safe flex justify-center">
           <button
             type="button"

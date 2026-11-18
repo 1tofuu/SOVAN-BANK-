@@ -1,5 +1,5 @@
-import type { Budget, Transaction } from '../types/finance';
-import { toISODateString } from '../utils/finance';
+import type { Budget, Transaction } from '../types';
+import { shiftMonth, toISODateString } from '../utils/date';
 
 function daysAgo(base: Date, days: number): string {
   const d = new Date(base);
@@ -10,20 +10,6 @@ function daysAgo(base: Date, days: number): string {
 function monthDay(year: number, month: number, day: number): string {
   const safeDay = Math.min(day, new Date(year, month, 0).getDate());
   return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
-}
-
-function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
-  let m = month + delta;
-  let y = year;
-  while (m <= 0) {
-    m += 12;
-    y -= 1;
-  }
-  while (m > 12) {
-    m -= 12;
-    y += 1;
-  }
-  return { year: y, month: m };
 }
 
 export function createInitialMockTransactions(anchorDate = new Date()): Transaction[] {

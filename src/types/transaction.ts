@@ -1,3 +1,5 @@
+import type { Currency } from './settings';
+
 export type TransactionType = 'income' | 'expense' | 'transfer';
 
 export type IncomeCategory = 'salary' | 'freelance' | 'business' | 'other_income';
@@ -24,14 +26,6 @@ export type TransferCategory =
 
 export type TransactionCategory = IncomeCategory | ExpenseCategory | TransferCategory;
 
-export type Currency = 'USD' | 'KHR';
-export type Language = 'en' | 'km';
-export type ThemeMode = 'light' | 'dark';
-
-export type AppTab = 'dashboard' | 'history' | 'budget' | 'analytics' | 'settings';
-
-export type AnalyticsPeriod = 'daily' | 'weekly' | 'monthly';
-
 export type DateFilterPreset = 'all' | 'this_month' | 'last_month' | 'custom_date';
 
 export interface CustomCategory {
@@ -54,31 +48,26 @@ export interface Transaction {
   updatedAt: string;
 }
 
-export interface Budget {
-  id: string;
-  month: number; // 1-12
-  year: number;
+export interface NewTransactionInput {
+  type: TransactionType;
   amount: number;
   currency: Currency;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface UserSettings {
-  name: string;
-  language: Language;
-  currency: Currency;
-  theme: ThemeMode;
-  pinEnabled: boolean;
-  pinCode: string;
-  openingBalanceUSD: number;
-}
-
-export interface TransactionFormValues {
-  type: TransactionType;
-  amount: string;
-  currency: Currency;
-  category: TransactionCategory | '';
+  category: TransactionCategory;
+  customCategory?: string;
+  recipient?: string;
   description: string;
   date: string;
+}
+
+export interface TransactionFilterCriteria {
+  searchQuery: string;
+  typeFilter: 'all' | TransactionType;
+  dateFilter: DateFilterPreset;
+  customDate: string;
+}
+
+export interface TransactionValidationErrors {
+  amount?: string;
+  category?: string;
+  date?: string;
 }

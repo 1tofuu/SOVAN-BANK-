@@ -1,7 +1,10 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { STORAGE_KEYS } from '../constants/app';
 import { createInitialMockBudgets } from '../data/mockData';
-import type { Budget, Currency } from '../types/finance';
+import { safeStorage } from '../services/storage/safeStorage';
+import type { Budget, Currency } from '../types';
+import { roundCurrencyAmount } from '../utils/currency';
 
 interface BudgetState {
   budgets: Budget[];
@@ -15,7 +18,10 @@ export const useBudgetStore = create<BudgetState>()(
     (set) => ({
       budgets: createInitialMockBudgets(new Date()),
 
-      upsertBudget: (month, year, amount, currency) =>
+      upsertBudget: (month, year, amount, currency) => {
+        const cleanAmount = roundCurrencyAmount(amount, currency);
+        if (cleanAmount <= 0 || month < 1 || month > 12) return;
+
         set((state) => {
           const now = new Date().toISOString();
           const existing = state.budgets.find((b) => b.month === month && b.year === year);
@@ -23,22 +29,24 @@ export const useBudgetStore = create<BudgetState>()(
             return {
               budgets: state.budgets.map((b) =>
                 b.id === existing.id
-                  ? { ...b, amount, currency, updatedAt: now }
+                  ? { ...b, amount: cleanAmount, currency, updatedAt: now }
                   : b
               ),
             };
           }
+
           const created: Budget = {
             id: `budget-${year}-${month}`,
             month,
             year,
-            amount,
+            amount: cleanAmount,
             currency,
             createdAt: now,
             updatedAt: now,
           };
           return { budgets: [...state.budgets, created] };
-        }),
+        });
+      },
 
       deleteBudget: (id) =>
         set((state) => ({
@@ -48,7 +56,8 @@ export const useBudgetStore = create<BudgetState>()(
       resetBudgets: () => set({ budgets: createInitialMockBudgets(new Date()) }),
     }),
     {
-      name: 'sovan-budgets-v1',
+      name: STORAGE_KEYS.budgets,
+      storage: createJSONStorage(() => safeStorage),
       partialize: (state) => ({
         budgets: state.budgets,
       }),

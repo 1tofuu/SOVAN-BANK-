@@ -10,12 +10,13 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import { CATEGORY_META } from '../../constants/categories';
+import { getCategoryLabel, getCategoryMeta } from '../../constants/categories';
 import { t } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTransactionStore } from '../../stores/transactionStore';
-import type { Currency, Transaction } from '../../types/finance';
-import { convertCurrency, formatCurrency, formatReadableDate, toISODateString } from '../../utils/finance';
+import type { Currency, Transaction } from '../../types';
+import { convertCurrency, formatCurrency } from '../../utils/currency';
+import { formatReadableDate, formatTimestamp, toISODateString } from '../../utils/date';
 import { CategoryIcon } from '../common/CategoryIcon';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Modal } from '../common/Modal';
@@ -37,7 +38,12 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
   if (!transaction) return null;
 
-  const meta = CATEGORY_META[transaction.category] ?? CATEGORY_META.other_expense;
+  const meta = getCategoryMeta(transaction.category);
+  const categoryLabel = getCategoryLabel(
+    transaction.category,
+    lang,
+    transaction.customCategory
+  );
   const isIncome = transaction.type === 'income';
   const isTransfer = transaction.type === 'transfer';
   const otherCurrency: Currency = transaction.currency === 'USD' ? 'KHR' : 'USD';
@@ -47,17 +53,6 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     otherCurrency
   );
   const todayStr = toISODateString(new Date());
-
-  const formatTimestamp = (iso: string) => {
-    try {
-      return new Intl.DateTimeFormat(lang === 'km' ? 'km-KH' : 'en-US', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(iso));
-    } catch {
-      return iso.slice(0, 16).replace('T', ' ');
-    }
-  };
 
   return (
     <>
@@ -110,7 +105,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                   : t(lang, 'expense')}
               </span>
               <span aria-hidden="true">·</span>
-              <span>{transaction.customCategory?.trim() || t(lang, meta.labelKey)}</span>
+              <span>{categoryLabel}</span>
             </div>
 
             <p
@@ -147,7 +142,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 <span>{t(lang, 'category')}</span>
               </div>
               <span className="text-sm font-medium text-[#0F1F18] dark:text-[#F1F5F2]">
-                {transaction.customCategory?.trim() || t(lang, meta.labelKey)}
+                {categoryLabel}
               </span>
             </div>
 
@@ -196,13 +191,12 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
           <div className="text-[11px] text-[#5B7268] dark:text-[#96ACA1] flex flex-col gap-1 px-1">
             <span>
-              {t(lang, 'created_at')}: {formatTimestamp(transaction.createdAt)}
+              {t(lang, 'created_at')}: {formatTimestamp(transaction.createdAt, lang)}
             </span>
             <span>
-              {t(lang, 'updated_at')}: {formatTimestamp(transaction.updatedAt)}
+              {t(lang, 'updated_at')}: {formatTimestamp(transaction.updatedAt, lang)}
             </span>
           </div>
-
         </div>
       </Modal>
 

@@ -1,51 +1,55 @@
+import { t, type TranslationKey } from '../i18n/translations';
 import type {
   ExpenseCategory,
   IncomeCategory,
+  Language,
   TransactionCategory,
   TransactionType,
   TransferCategory,
-} from '../types/finance';
+} from '../types';
+
+export type CategoryIconName =
+  | 'Briefcase'
+  | 'Laptop'
+  | 'Store'
+  | 'Coins'
+  | 'Utensils'
+  | 'Car'
+  | 'ShoppingBag'
+  | 'GraduationCap'
+  | 'Film'
+  | 'Zap'
+  | 'HeartPulse'
+  | 'Sparkles'
+  | 'Plane'
+  | 'Layers'
+  | 'Landmark'
+  | 'QrCode'
+  | 'Smartphone'
+  | 'Users'
+  | 'Vault'
+  | 'Send';
 
 export interface CategoryMeta {
   id: TransactionCategory;
   type: TransactionType;
-  labelKey: string;
+  labelKey: TranslationKey;
   color: string;
   bgLight: string;
   bgDark: string;
   textLight: string;
   textDark: string;
-  iconName:
-    | 'Briefcase'
-    | 'Laptop'
-    | 'Store'
-    | 'Coins'
-    | 'Utensils'
-    | 'Car'
-    | 'ShoppingBag'
-    | 'GraduationCap'
-    | 'Film'
-    | 'Zap'
-    | 'HeartPulse'
-    | 'Sparkles'
-    | 'Plane'
-    | 'Layers'
-    | 'Landmark'
-    | 'QrCode'
-    | 'Smartphone'
-    | 'Users'
-    | 'Vault'
-    | 'Send';
+  iconName: CategoryIconName;
 }
 
-export const INCOME_CATEGORIES: IncomeCategory[] = [
+export const INCOME_CATEGORIES: readonly IncomeCategory[] = [
   'salary',
   'freelance',
   'business',
   'other_income',
 ];
 
-export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+export const EXPENSE_CATEGORIES: readonly ExpenseCategory[] = [
   'food_drinks',
   'transportation',
   'shopping',
@@ -58,7 +62,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'other_expense',
 ];
 
-export const TRANSFER_CATEGORIES: TransferCategory[] = [
+export const TRANSFER_CATEGORIES: readonly TransferCategory[] = [
   'bank_transfer',
   'bakong_khqr',
   'wing_ewallet',
@@ -289,3 +293,35 @@ export const CATEGORY_META: Record<TransactionCategory, CategoryMeta> = {
     iconName: 'Send',
   },
 };
+
+export function getCategoryMeta(category: TransactionCategory): CategoryMeta {
+  return CATEGORY_META[category] ?? CATEGORY_META.other_expense;
+}
+
+export function getCategoriesForType(type: TransactionType): readonly TransactionCategory[] {
+  if (type === 'income') return INCOME_CATEGORIES;
+  if (type === 'transfer') return TRANSFER_CATEGORIES;
+  return EXPENSE_CATEGORIES;
+}
+
+export function getDefaultCategoryForType(type: TransactionType): TransactionCategory {
+  if (type === 'income') return 'salary';
+  if (type === 'transfer') return 'bank_transfer';
+  return 'food_drinks';
+}
+
+export function getOtherCategoryId(type: TransactionType): TransactionCategory {
+  if (type === 'income') return 'other_income';
+  if (type === 'transfer') return 'other_transfer';
+  return 'other_expense';
+}
+
+export function getCategoryLabel(
+  category: TransactionCategory,
+  lang: Language,
+  customCategory?: string
+): string {
+  const customTrimmed = customCategory?.trim();
+  if (customTrimmed) return customTrimmed;
+  return t(lang, getCategoryMeta(category).labelKey);
+}

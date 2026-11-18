@@ -8,11 +8,62 @@ import {
   Plus,
   Settings,
   Sun,
+  type LucideIcon,
 } from 'lucide-react';
-import { t } from '../../i18n/translations';
+import { BRAND_ASSETS } from '../../constants/app';
+import { t, type TranslationKey } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { AppTab } from '../../types/finance';
+import type { AppTab, Language } from '../../types';
 import { SovanLogo } from '../common/SovanLogo';
+
+interface NavItemConfig {
+  id: AppTab;
+  labelKey: TranslationKey;
+  icon: LucideIcon;
+}
+
+const DESKTOP_NAV_ITEMS: readonly NavItemConfig[] = [
+  { id: 'dashboard', labelKey: 'nav_dashboard', icon: LayoutDashboard },
+  { id: 'history', labelKey: 'nav_history', icon: Clock },
+  { id: 'budget', labelKey: 'nav_budget', icon: PiggyBank },
+  { id: 'analytics', labelKey: 'nav_analytics', icon: BarChart3 },
+  { id: 'settings', labelKey: 'nav_settings', icon: Settings },
+];
+
+const MOBILE_LEFT_TABS: readonly NavItemConfig[] = DESKTOP_NAV_ITEMS.slice(0, 2);
+const MOBILE_RIGHT_TABS: readonly NavItemConfig[] = DESKTOP_NAV_ITEMS.slice(2, 4);
+
+interface MobileTabButtonProps {
+  item: NavItemConfig;
+  active: boolean;
+  lang: Language;
+  onSelect: (tab: AppTab) => void;
+}
+
+const MobileTabButton: React.FC<MobileTabButtonProps> = ({
+  item,
+  active,
+  lang,
+  onSelect,
+}) => {
+  const Icon = item.icon;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item.id)}
+      className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 transition-colors ${
+        active
+          ? 'text-[#0E5A3E] dark:text-[#5AD3A3]'
+          : 'text-[#5B7268] dark:text-[#96ACA1]'
+      }`}
+    >
+      <Icon size={20} strokeWidth={active ? 2.4 : 1.9} />
+      <span className="text-[10px] font-medium truncate max-w-[64px]">
+        {t(lang, item.labelKey)}
+      </span>
+    </button>
+  );
+};
 
 interface AppShellProps {
   activeTab: AppTab;
@@ -31,20 +82,12 @@ export const AppShell: React.FC<AppShellProps> = ({
   const theme = useSettingsStore((s) => s.theme);
   const toggleTheme = useSettingsStore((s) => s.toggleTheme);
 
-  const navItems: { id: AppTab; labelKey: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard', labelKey: 'nav_dashboard', icon: <LayoutDashboard size={20} /> },
-    { id: 'history', labelKey: 'nav_history', icon: <Clock size={20} /> },
-    { id: 'budget', labelKey: 'nav_budget', icon: <PiggyBank size={20} /> },
-    { id: 'analytics', labelKey: 'nav_analytics', icon: <BarChart3 size={20} /> },
-    { id: 'settings', labelKey: 'nav_settings', icon: <Settings size={20} /> },
-  ];
-
   return (
     <div className="relative min-h-screen bg-[#E9F4EA] dark:bg-[#0B120E] text-[#0F1F18] dark:text-[#F1F5F2] flex flex-col lg:flex-row">
       {/* Cambodian Heritage Background Artwork */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <img
-          src="/assets/aistudio/bg3_c6f8d03b.png"
+          src={BRAND_ASSETS.background}
           alt=""
           className="w-full h-full object-cover object-center"
         />
@@ -76,8 +119,9 @@ export const AppShell: React.FC<AppShellProps> = ({
 
           {/* Navigation Links */}
           <nav className="space-y-1" aria-label="Main navigation">
-            {navItems.map((item) => {
+            {DESKTOP_NAV_ITEMS.map((item) => {
               const active = activeTab === item.id;
+              const Icon = item.icon;
               return (
                 <button
                   key={item.id}
@@ -89,7 +133,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                       : 'text-[#4A6157] dark:text-[#A3B8AE] hover:bg-[#0E5A3E]/5 dark:hover:bg-white/6 hover:text-[#0F1F18] dark:hover:text-white'
                   }`}
                 >
-                  {item.icon}
+                  <Icon size={20} />
                   <span className="truncate">{t(lang, item.labelKey)}</span>
                 </button>
               );
@@ -158,35 +202,15 @@ export const AppShell: React.FC<AppShellProps> = ({
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#121C16]/95 backdrop-blur-md border-t border-[#0E5A3E]/12 dark:border-white/10 pb-safe"
       >
         <div className="grid grid-cols-5 items-center h-16 px-1">
-          <button
-            type="button"
-            onClick={() => onSelectTab('dashboard')}
-            className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 transition-colors ${
-              activeTab === 'dashboard'
-                ? 'text-[#0E5A3E] dark:text-[#5AD3A3]'
-                : 'text-[#5B7268] dark:text-[#96ACA1]'
-            }`}
-          >
-            <LayoutDashboard size={20} strokeWidth={activeTab === 'dashboard' ? 2.4 : 1.9} />
-            <span className="text-[10px] font-medium truncate max-w-[64px]">
-              {t(lang, 'nav_dashboard')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSelectTab('history')}
-            className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 transition-colors ${
-              activeTab === 'history'
-                ? 'text-[#0E5A3E] dark:text-[#5AD3A3]'
-                : 'text-[#5B7268] dark:text-[#96ACA1]'
-            }`}
-          >
-            <Clock size={20} strokeWidth={activeTab === 'history' ? 2.4 : 1.9} />
-            <span className="text-[10px] font-medium truncate max-w-[64px]">
-              {t(lang, 'nav_history')}
-            </span>
-          </button>
+          {MOBILE_LEFT_TABS.map((item) => (
+            <MobileTabButton
+              key={item.id}
+              item={item}
+              active={activeTab === item.id}
+              lang={lang}
+              onSelect={onSelectTab}
+            />
+          ))}
 
           {/* Center Quick Add Button */}
           <div className="flex items-center justify-center">
@@ -200,35 +224,15 @@ export const AppShell: React.FC<AppShellProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onSelectTab('budget')}
-            className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 transition-colors ${
-              activeTab === 'budget'
-                ? 'text-[#0E5A3E] dark:text-[#5AD3A3]'
-                : 'text-[#5B7268] dark:text-[#96ACA1]'
-            }`}
-          >
-            <PiggyBank size={20} strokeWidth={activeTab === 'budget' ? 2.4 : 1.9} />
-            <span className="text-[10px] font-medium truncate max-w-[64px]">
-              {t(lang, 'nav_budget')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSelectTab('analytics')}
-            className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 transition-colors ${
-              activeTab === 'analytics'
-                ? 'text-[#0E5A3E] dark:text-[#5AD3A3]'
-                : 'text-[#5B7268] dark:text-[#96ACA1]'
-            }`}
-          >
-            <BarChart3 size={20} strokeWidth={activeTab === 'analytics' ? 2.4 : 1.9} />
-            <span className="text-[10px] font-medium truncate max-w-[64px]">
-              {t(lang, 'nav_analytics')}
-            </span>
-          </button>
+          {MOBILE_RIGHT_TABS.map((item) => (
+            <MobileTabButton
+              key={item.id}
+              item={item}
+              active={activeTab === item.id}
+              lang={lang}
+              onSelect={onSelectTab}
+            />
+          ))}
         </div>
       </nav>
     </div>

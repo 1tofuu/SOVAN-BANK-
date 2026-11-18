@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from './components/navigation/AppShell';
 import { PinLockScreen } from './components/security/PinLockScreen';
 import { TransactionDetailsModal } from './components/transactions/TransactionDetailsModal';
@@ -16,13 +16,12 @@ import { HistoryScreen } from './screens/HistoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { useSettingsStore } from './stores/settingsStore';
 import { useTransactionStore } from './stores/transactionStore';
-import type { AppTab, Transaction, TransactionType } from './types/finance';
+import type { AppTab, Transaction, TransactionType } from './types';
 
 export default function App() {
   const theme = useSettingsStore((s) => s.theme);
   const lang = useSettingsStore((s) => s.language);
   const isLocked = useSettingsStore((s) => s.isLocked);
-  const transactions = useTransactionStore((s) => s.transactions);
 
   const now = new Date();
   const [showWelcome, setShowWelcome] = useState(true);
@@ -35,6 +34,11 @@ export default function App() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
+  // Narrow selector: only re-render App when the currently inspected transaction changes.
+  const selectedTransaction = useTransactionStore((s) =>
+    selectedTxId ? s.transactions.find((tx) => tx.id === selectedTxId) ?? null : null
+  );
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
@@ -43,25 +47,39 @@ export default function App() {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const selectedTransaction =
-    selectedTxId ? transactions.find((tx) => tx.id === selectedTxId) ?? null : null;
-
-  const handleOpenAdd = (initialType: TransactionType = 'expense') => {
+  const handleOpenAdd = useCallback((initialType: TransactionType = 'expense') => {
     setEditingTx(null);
     setFormInitialType(initialType);
     setFormModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEdit = (tx: Transaction) => {
+  const handleOpenEdit = useCallback((tx: Transaction) => {
     setEditingTx(tx);
     setFormInitialType(tx.type);
     setFormModalOpen(true);
-  };
+  }, []);
 
-  const handleMonthChange = (month: number, year: number) => {
+  const handleCloseForm = useCallback(() => {
+    setFormModalOpen(false);
+    setEditingTx(null);
+  }, []);
+
+  const handleSelectTransaction = useCallback((tx: Transaction) => {
+    setSelectedTxId(tx.id);
+  }, []);
+
+  const handleCloseDetails = useCallback(() => {
+    setSelectedTxId(null);
+  }, []);
+
+  const handleMonthChange = useCallback((month: number, year: number) => {
     setSelectedMonth(month);
     setSelectedYear(year);
-  };
+  }, []);
+
+  const handleNavigateHistory = useCallback(() => setActiveTab('history'), []);
+  const handleNavigateBudget = useCallback(() => setActiveTab('budget'), []);
+  const handleOpenDefaultAdd = useCallback(() => handleOpenAdd('expense'), [handleOpenAdd]);
 
   if (showWelcome) {
     return <WelcomeScreen onContinue={() => setShowWelcome(false)} />;
@@ -75,31 +93,29 @@ export default function App() {
     <AppShell
       activeTab={activeTab}
       onSelectTab={setActiveTab}
-      onOpenAdd={() => handleOpenAdd('expense')}
+      onOpenAdd={handleOpenDefaultAdd}
     >
       {activeTab === 'dashboard' && (
         <DashboardScreen
-          transactions={transactions}
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
           onChangeMonth={handleMonthChange}
           onOpenAdd={handleOpenAdd}
-          onSelectTransaction={(tx) => setSelectedTxId(tx.id)}
-          onNavigateHistory={() => setActiveTab('history')}
-          onNavigateBudget={() => setActiveTab('budget')}
+          onSelectTransaction={handleSelectTransaction}
+          onNavigateHistory={handleNavigateHistory}
+          onNavigateBudget={handleNavigateBudget}
         />
       )}
 
       {activeTab === 'history' && (
         <HistoryScreen
           onOpenAdd={handleOpenAdd}
-          onSelectTransaction={(tx) => setSelectedTxId(tx.id)}
+          onSelectTransaction={handleSelectTransaction}
         />
       )}
 
       {activeTab === 'budget' && (
         <BudgetScreen
-          transactions={transactions}
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
           onChangeMonth={handleMonthChange}
@@ -108,7 +124,6 @@ export default function App() {
 
       {activeTab === 'analytics' && (
         <AnalyticsScreen
-          transactions={transactions}
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
           onChangeMonth={handleMonthChange}
@@ -119,17 +134,14 @@ export default function App() {
 
       <TransactionFormModal
         isOpen={formModalOpen}
-        onClose={() => {
-          setFormModalOpen(false);
-          setEditingTx(null);
-        }}
+        onClose={handleCloseForm}
         editingTransaction={editingTx}
         initialType={formInitialType}
       />
 
       <TransactionDetailsModal
         transaction={selectedTransaction}
-        onClose={() => setSelectedTxId(null)}
+        onClose={handleCloseDetails}
         onEdit={handleOpenEdit}
       />
     </AppShell>

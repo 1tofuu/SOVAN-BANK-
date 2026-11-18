@@ -1,29 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import { AlertCircle, Plus, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle } from 'lucide-react';
 import {
-  CATEGORY_META,
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  TRANSFER_CATEGORIES,
+  getCategoriesForType,
+  getDefaultCategoryForType,
+  getOtherCategoryId,
 } from '../../constants/categories';
 import { t } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTransactionStore } from '../../stores/transactionStore';
 import type {
   Currency,
+  CustomCategory,
   Transaction,
   TransactionCategory,
   TransactionType,
-} from '../../types/finance';
-import {
-  calculateBalanceMetrics,
-  convertCurrency,
-  formatCurrency,
-  toISODateString,
-  toMinorUnits,
-} from '../../utils/finance';
-import { CategoryIcon } from '../common/CategoryIcon';
+  TransactionValidationErrors,
+} from '../../types';
+import { calculateAvailableTransferBalance } from '../../utils/calculations';
+import { toISODateString } from '../../utils/date';
+import { validateTransactionInput } from '../../utils/validation';
 import { Modal } from '../common/Modal';
+import { AmountCurrencyField } from './AmountCurrencyField';
+import { CategorySelectorGrid } from './CategorySelectorGrid';
+import { TransactionTypeSwitch } from './TransactionTypeSwitch';
 
 interface TransactionFormModalProps {
   isOpen: boolean;
@@ -53,22 +52,12 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<Currency>(defaultCurrency);
   const [category, setCategory] = useState<TransactionCategory | ''>('');
-  const [selectedCustomName, setSelectedCustomName] = useState<string>('');
-  const [customCategoryDraft, setCustomCategoryDraft] = useState<string>('');
-  const [recipient, setRecipient] = useState<string>('');
+  const [selectedCustomName, setSelectedCustomName] = useState('');
+  const [customCategoryDraft, setCustomCategoryDraft] = useState('');
+  const [recipient, setRecipient] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(toISODateString(new Date()));
-  const [errors, setErrors] = useState<{
-    amount?: string;
-    category?: string;
-    date?: string;
-  }>({});
-
-  const getDefaultCategoryForType = (txType: TransactionType): TransactionCategory => {
-    if (txType === 'income') return 'salary';
-    if (txType === 'transfer') return 'bank_transfer';
-    return 'food_drinks';
-  };
+  const [errors, setErrors] = useState<TransactionValidationErrors>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -96,31 +85,28 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     }
   }, [isOpen, editingTransaction, initialType, defaultCurrency]);
 
-  const categories: TransactionCategory[] =
-    type === 'income'
-      ? INCOME_CATEGORIES
-      : type === 'transfer'
-      ? TRANSFER_CATEGORIES
-      : EXPENSE_CATEGORIES;
-
-  const otherCategoryId: TransactionCategory =
-    type === 'income'
-      ? 'other_income'
-      : type === 'transfer'
-      ? 'other_transfer'
-      : 'other_expense';
-
-  const savedCustomForType = customCategories.filter((c) => c.type === type);
+  const categories = getCategoriesForType(type);
+  const otherCategoryId = getOtherCategoryId(type);
+  const savedCustomForType = useMemo(
+    () => customCategories.filter((c) => c.type === type),
+    [customCategories, type]
+  );
   const isOtherBaseSelected = category === otherCategoryId && !selectedCustomName;
+
+  const availableBalance = useMemo(
+    () =>
+      calculateAvailableTransferBalance(
+        transactions,
+        openingBalanceUSD,
+        currency,
+        editingTransaction
+      ),
+    [transactions, openingBalanceUSD, currency, editingTransaction]
+  );
 
   const handleTypeSwitch = (nextType: TransactionType) => {
     setType(nextType);
-    const validList: TransactionCategory[] =
-      nextType === 'income'
-        ? INCOME_CATEGORIES
-        : nextType === 'transfer'
-        ? TRANSFER_CATEGORIES
-        : EXPENSE_CATEGORIES;
+    const validList = getCategoriesForType(nextType);
     if (!category || !validList.includes(category)) {
       setCategory(validList[0]);
     }
@@ -133,68 +119,50 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     const trimmed = customCategoryDraft.trim();
     if (!trimmed) return;
     const created = addCustomCategory(trimmed, type);
+    if (!created) return;
     setCategory(otherCategoryId);
     setSelectedCustomName(created.name);
     setCustomCategoryDraft('');
     setErrors((prev) => ({ ...prev, category: undefined }));
   };
 
-  // Available balance in the form's selected currency (excluding the edited transfer's original amount if editing)
-  const rawBalanceInCurrency = calculateBalanceMetrics(
-    transactions,
-    openingBalanceUSD,
-    currency
-  ).totalBalance;
-  const editingRefund =
-    editingTransaction && editingTransaction.type === 'transfer'
-      ? convertCurrency(editingTransaction.amount, editingTransaction.currency, currency)
-      : 0;
-  const availableBalance = Math.max(
-    0,
-    Math.round((rawBalanceInCurrency + editingRefund) * (currency === 'USD' ? 100 : 1)) /
-      (currency === 'USD' ? 100 : 1)
-  );
+  const handleRemoveCustomCategory = (customCat: CustomCategory) => {
+    removeCustomCategory(customCat.id);
+    if (selectedCustomName.toLowerCase() === customCat.name.toLowerCase()) {
+      setSelectedCustomName('');
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const nextErrors: { amount?: string; category?: string; date?: string } = {};
+    const validation = validateTransactionInput({
+      type,
+      amountRaw: amount,
+      currency,
+      category,
+      date,
+      availableTransferBalance: availableBalance,
+      lang,
+    });
 
-    const parsedAmount = parseFloat(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      nextErrors.amount = t(lang, 'err_amount_positive');
-    } else if (type === 'transfer') {
-      const requestedMinor = toMinorUnits(parsedAmount, currency);
-      const availableMinor = toMinorUnits(availableBalance, currency);
-      if (availableMinor <= 0 || requestedMinor > availableMinor) {
-        nextErrors.amount = `${t(lang, 'err_insufficient_balance')} (${t(
-          lang,
-          'available_balance'
-        )}: ${formatCurrency(availableBalance, currency)})`;
-      }
-    }
-    if (!category) {
-      nextErrors.category = t(lang, 'err_category_required');
-    }
-    if (!date) {
-      nextErrors.date = t(lang, 'err_date_required');
-    }
-
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
+    if (!validation.valid) {
+      setErrors(validation.errors);
       return;
     }
 
     let resolvedCustomCategory: string | undefined = selectedCustomName.trim() || undefined;
     if (isOtherBaseSelected && customCategoryDraft.trim()) {
       const created = addCustomCategory(customCategoryDraft.trim(), type);
-      resolvedCustomCategory = created.name;
+      if (created) {
+        resolvedCustomCategory = created.name;
+      }
     }
 
     const payload = {
       type,
-      amount: currency === 'KHR' ? Math.round(parsedAmount) : Math.round(parsedAmount * 100) / 100,
+      amount: validation.cleanAmount,
       currency,
-      category: category as TransactionCategory,
+      category: validation.category,
       customCategory: resolvedCustomCategory,
       recipient: type === 'transfer' ? recipient.trim() || undefined : undefined,
       description: description.trim(),
@@ -251,254 +219,46 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
       }
     >
       <div className="space-y-5">
-        {/* Type Segmented Switch */}
-        <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#0E5A3E]/6 dark:bg-white/6">
-          <button
-            type="button"
-            onClick={() => handleTypeSwitch('expense')}
-            className={`min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-              type === 'expense'
-                ? 'bg-white dark:bg-[#1B2A22] text-[#0F1F18] dark:text-[#F1F5F2] shadow-xs'
-                : 'text-[#4A6157] dark:text-[#A3B8AE] hover:text-[#0F1F18] dark:hover:text-white'
-            }`}
-          >
-            {t(lang, 'expense')}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTypeSwitch('income')}
-            className={`min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-              type === 'income'
-                ? 'bg-[#0E5A3E] text-white shadow-xs'
-                : 'text-[#4A6157] dark:text-[#A3B8AE] hover:text-[#0F1F18] dark:hover:text-white'
-            }`}
-          >
-            {t(lang, 'income')}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTypeSwitch('transfer')}
-            className={`min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-              type === 'transfer'
-                ? 'bg-[#C89B3C] text-white shadow-xs'
-                : 'text-[#4A6157] dark:text-[#A3B8AE] hover:text-[#0F1F18] dark:hover:text-white'
-            }`}
-          >
-            {t(lang, 'transfer_out')}
-          </button>
-        </div>
+        <TransactionTypeSwitch value={type} lang={lang} onChange={handleTypeSwitch} />
 
-        {/* Amount + Currency Row */}
-        <div>
-          <label
-            htmlFor="tx-amount"
-            className="block text-xs font-medium text-[#4A6157] dark:text-[#A3B8AE] mb-1.5"
-          >
-            {t(lang, 'amount')}
-          </label>
-          <div className="flex items-stretch gap-2">
-            <div className="relative flex-1">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-semibold text-[#4A6157] dark:text-[#A3B8AE] pointer-events-none">
-                {currency === 'USD' ? '$' : '៛'}
-              </span>
-              <input
-                id="tx-amount"
-                type="number"
-                inputMode="decimal"
-                step={currency === 'USD' ? '0.01' : '100'}
-                min="0"
-                placeholder={currency === 'USD' ? '0.00' : '0'}
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  if (errors.amount) setErrors((prev) => ({ ...prev, amount: undefined }));
-                }}
-                className={`w-full min-h-[48px] pl-9 pr-4 rounded-xl border text-lg font-semibold tabular-nums font-mono-num bg-[#FAFBF9] dark:bg-[#0B120E] text-[#0F1F18] dark:text-[#F1F5F2] focus:outline-none focus:ring-2 ${
-                  errors.amount
-                    ? 'border-red-500 focus:ring-red-500/30'
-                    : 'border-[#0E5A3E]/18 dark:border-white/14 focus:ring-[#0E5A3E]/30 focus:border-[#0E5A3E]'
-                }`}
-              />
-            </div>
+        <AmountCurrencyField
+          type={type}
+          amount={amount}
+          currency={currency}
+          availableBalance={availableBalance}
+          error={errors.amount}
+          lang={lang}
+          onAmountChange={(value) => {
+            setAmount(value);
+            if (errors.amount) setErrors((prev) => ({ ...prev, amount: undefined }));
+          }}
+          onCurrencyChange={setCurrency}
+        />
 
-            <div className="grid grid-cols-2 p-1 rounded-xl border border-[#0E5A3E]/14 dark:border-white/12 bg-[#FAFBF9] dark:bg-[#0B120E] shrink-0">
-              {(['USD', 'KHR'] as Currency[]).map((cur) => (
-                <button
-                  key={cur}
-                  type="button"
-                  onClick={() => setCurrency(cur)}
-                  className={`px-3 min-h-[38px] rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                    currency === cur
-                      ? 'bg-[#C89B3C] text-white'
-                      : 'text-[#4A6157] dark:text-[#A3B8AE] hover:text-[#0F1F18] dark:hover:text-white'
-                  }`}
-                >
-                  {cur}
-                </button>
-              ))}
-            </div>
-          </div>
-          {type === 'transfer' && (
-            <div className="mt-2 flex items-center justify-between text-xs px-1">
-              <span className="text-[#5B7268] dark:text-[#96ACA1]">
-                {t(lang, 'available_balance')}:
-              </span>
-              <span
-                className={`font-semibold tabular-nums font-mono-num ${
-                  availableBalance <= 0
-                    ? 'text-red-600 dark:text-red-400'
-                    : 'text-[#0E5A3E] dark:text-[#5AD3A3]'
-                }`}
-              >
-                {formatCurrency(availableBalance, currency)}
-              </span>
-            </div>
-          )}
-          {type === 'transfer' && availableBalance <= 0 && !errors.amount && (
-            <div
-              role="alert"
-              className="mt-2 rounded-xl border border-red-500/25 bg-red-600/8 dark:bg-red-500/12 px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-2"
-            >
-              <AlertCircle size={15} className="shrink-0" />
-              <span>{t(lang, 'alert_balance_zero_transfer')}</span>
-            </div>
-          )}
-          {errors.amount && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-              <AlertCircle size={14} className="shrink-0" />
-              <span>{errors.amount}</span>
-            </p>
-          )}
-        </div>
-
-        {/* Category Grid Selector */}
-        <div>
-          <span className="block text-xs font-medium text-[#4A6157] dark:text-[#A3B8AE] mb-2">
-            {t(lang, 'category')}
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {categories.map((catId) => {
-              const meta = CATEGORY_META[catId];
-              const isSelected = category === catId && !selectedCustomName;
-              return (
-                <button
-                  key={catId}
-                  type="button"
-                  onClick={() => {
-                    setCategory(catId);
-                    setSelectedCustomName('');
-                    if (errors.category) setErrors((prev) => ({ ...prev, category: undefined }));
-                  }}
-                  className={`min-h-[46px] px-3 py-2 rounded-xl border flex items-center gap-2.5 text-left transition-all ${
-                    isSelected
-                      ? 'border-[#0E5A3E] dark:border-[#C89B3C] bg-[#0E5A3E]/8 dark:bg-[#C89B3C]/15 text-[#0F1F18] dark:text-[#F1F5F2] ring-1 ring-[#0E5A3E]/25 dark:ring-[#C89B3C]/35'
-                      : 'border-[#0E5A3E]/12 dark:border-white/10 bg-white dark:bg-[#0B120E]/60 text-[#4A6157] dark:text-[#A3B8AE] hover:border-[#0E5A3E]/30 dark:hover:border-white/25'
-                  }`}
-                >
-                  <span
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.bgLight} ${meta.bgDark} ${meta.textLight} ${meta.textDark}`}
-                  >
-                    <CategoryIcon category={catId} size={15} />
-                  </span>
-                  <span className="text-xs font-medium truncate">{t(lang, meta.labelKey)}</span>
-                </button>
-              );
-            })}
-
-            {/* User-added Custom Categories */}
-            {savedCustomForType.map((customCat) => {
-              const meta = CATEGORY_META[otherCategoryId];
-              const isSelected =
-                category === otherCategoryId &&
-                selectedCustomName.toLowerCase() === customCat.name.toLowerCase();
-              return (
-                <div
-                  key={customCat.id}
-                  className={`min-h-[46px] pl-3 pr-1.5 py-1.5 rounded-xl border flex items-center justify-between gap-1.5 transition-all ${
-                    isSelected
-                      ? 'border-[#0E5A3E] dark:border-[#C89B3C] bg-[#0E5A3E]/8 dark:bg-[#C89B3C]/15 text-[#0F1F18] dark:text-[#F1F5F2] ring-1 ring-[#0E5A3E]/25 dark:ring-[#C89B3C]/35'
-                      : 'border-[#0E5A3E]/12 dark:border-white/10 bg-white dark:bg-[#0B120E]/60 text-[#4A6157] dark:text-[#A3B8AE] hover:border-[#0E5A3E]/30 dark:hover:border-white/25'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCategory(otherCategoryId);
-                      setSelectedCustomName(customCat.name);
-                      if (errors.category) setErrors((prev) => ({ ...prev, category: undefined }));
-                    }}
-                    className="flex items-center gap-2 min-w-0 flex-1 text-left py-1"
-                  >
-                    <span
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.bgLight} ${meta.bgDark} ${meta.textLight} ${meta.textDark}`}
-                    >
-                      <CategoryIcon category={otherCategoryId} size={15} />
-                    </span>
-                    <span className="text-xs font-medium truncate">{customCat.name}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      removeCustomCategory(customCat.id);
-                      if (selectedCustomName.toLowerCase() === customCat.name.toLowerCase()) {
-                        setSelectedCustomName('');
-                      }
-                    }}
-                    aria-label={`Remove ${customCat.name}`}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-[#5B7268] hover:text-red-600 hover:bg-red-600/10 shrink-0 transition-colors"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Inline Custom Category Creator when "Other" is selected */}
-          {isOtherBaseSelected && (
-            <div className="mt-3 p-3.5 rounded-xl border border-[#C89B3C]/35 bg-[#C89B3C]/8 dark:bg-[#C89B3C]/12 space-y-2">
-              <label
-                htmlFor="custom-category-input"
-                className="block text-xs font-semibold text-[#0F1F18] dark:text-[#F1F5F2]"
-              >
-                {t(lang, 'custom_category_label')}
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  id="custom-category-input"
-                  type="text"
-                  maxLength={40}
-                  value={customCategoryDraft}
-                  onChange={(e) => setCustomCategoryDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddCustomCategory();
-                    }
-                  }}
-                  placeholder={t(lang, 'custom_category_placeholder')}
-                  className="flex-1 min-h-[42px] px-3 rounded-xl border border-[#0E5A3E]/18 dark:border-white/14 bg-white dark:bg-[#0B120E] text-sm text-[#0F1F18] dark:text-[#F1F5F2] focus:outline-none focus:ring-2 focus:ring-[#C89B3C]/40"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCustomCategory}
-                  disabled={!customCategoryDraft.trim()}
-                  className="min-h-[42px] px-3.5 rounded-xl bg-[#C89B3C] hover:bg-[#B2882E] disabled:opacity-45 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
-                >
-                  <Plus size={15} />
-                  <span>{t(lang, 'add_category_btn')}</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {errors.category && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-              <AlertCircle size={14} />
-              <span>{errors.category}</span>
-            </p>
-          )}
-        </div>
+        <CategorySelectorGrid
+          categories={categories}
+          otherCategoryId={otherCategoryId}
+          selectedCategory={category}
+          savedCustomCategories={savedCustomForType}
+          selectedCustomName={selectedCustomName}
+          customCategoryDraft={customCategoryDraft}
+          isOtherBaseSelected={isOtherBaseSelected}
+          error={errors.category}
+          lang={lang}
+          onSelectBuiltIn={(catId) => {
+            setCategory(catId);
+            setSelectedCustomName('');
+            if (errors.category) setErrors((prev) => ({ ...prev, category: undefined }));
+          }}
+          onSelectCustom={(customName) => {
+            setCategory(otherCategoryId);
+            setSelectedCustomName(customName);
+            if (errors.category) setErrors((prev) => ({ ...prev, category: undefined }));
+          }}
+          onRemoveCustom={handleRemoveCustomCategory}
+          onCustomDraftChange={setCustomCategoryDraft}
+          onAddCustomCategory={handleAddCustomCategory}
+        />
 
         {/* Recipient / Account (Transfer Out only) */}
         {type === 'transfer' && (
