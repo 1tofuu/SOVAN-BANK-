@@ -1,0 +1,6 @@
+{
+  "name": "SOVAN — Personal Finance Tracker",
+  "description": "SOVAN (សុវណ្ណ) is a modern minimalist personal finance tracker with Cambodian cultural inspiration, supporting USD and KHR, English and Khmer, budgeting, and real-time analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
